@@ -6,13 +6,13 @@ use App\Models\Biblio;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
-class LoanController
-{
+class LoanController {
     public function index(Request $req, Response $res, $args)
     {
         $params = $req->getQueryParams();
         $page = max(1, (int)($params['page'] ?? 1));
         $perPage = min(100, max(1, (int)($params['per_page'] ?? 20)));
+
         $query = Loan::query();
 
         if (!empty($params['member_id'])) {
@@ -22,16 +22,54 @@ class LoanController
             $query->where('is_return', (int)$params['is_return']);
         }
 
-        $total = $query->count();
-        $data = $query->with('biblio')->offset(($page-1)*$perPage)->limit($perPage)->get();
+        // Ambil semua loan yang sesuai filter, urut dari terbaru
+        $allLoans = $query->orderByDesc('loan_id')->get();
+
+        // Ambil latest loan per member (unik)
+        $latestPerMember = collect();
+        $seenMembers = [];
+
+        foreach ($allLoans as $loan) {
+            if (!in_array($loan->member_id, $seenMembers)) {
+                $latestPerMember->push($loan);
+                $seenMembers[] = $loan->member_id;
+            }
+        }
+
+        $total = count($seenMembers);
+
+        // Slice untuk pagination
+        $paginated = $latestPerMember->slice(($page - 1) * $perPage, $perPage)->values();
+
+        // Format data jika perlu
+        $data = $paginated->map(function($loan) {
+            return [
+                'loan_id' => $loan->loan_id,
+                'member_id' => $loan->member_id,
+                'nama' => $loan->nama ?? null,
+                'nim' => $loan->nim ?? null,
+                'prodi' => $loan->prodi ?? null,
+                'kelas' => $loan->kelas ?? null,
+                'semester' => $loan->semester ?? null,
+                'loan_date' => $loan->loan_date,
+                'due_date' => $loan->due_date,
+                'return_date' => $loan->return_date,
+                'status' => $loan->is_return ? 'Lunas' : 'Belum',
+            ];
+        });
 
         $payload = [
-            'meta' => ['total' => $total, 'page' => $page, 'per_page' => $perPage],
+            'meta' => [
+                'total' => $total,
+                'page' => $page,
+                'per_page' => $perPage
+            ],
             'data' => $data
         ];
+
         $res->getBody()->write(json_encode($payload));
         return $res->withHeader('Content-Type', 'application/json');
-    }
+}
 
     public function show(Request $req, Response $res, $args)
     {
