@@ -10,66 +10,87 @@ class LoanController {
     public function index(Request $req, Response $res, $args)
     {
         $params = $req->getQueryParams();
+
         $page = max(1, (int)($params['page'] ?? 1));
         $perPage = min(100, max(1, (int)($params['per_page'] ?? 20)));
+        $search = trim($params['search'] ?? '');
 
-        $query = Loan::query();
-
-        if (!empty($params['member_id'])) {
-            $query->where('member_id', $params['member_id']);
-        }
+        // ===============================
+        // NORMALISASI is_return
+        // ===============================
+        $isReturn = null;
         if (isset($params['is_return'])) {
-            $query->where('is_return', (int)$params['is_return']);
-        }
-
-        // Ambil semua loan yang sesuai filter, urut dari terbaru
-        $allLoans = $query->orderByDesc('loan_id')->get();
-
-        // Ambil latest loan per member (unik)
-        $latestPerMember = collect();
-        $seenMembers = [];
-
-        foreach ($allLoans as $loan) {
-            if (!in_array($loan->member_id, $seenMembers)) {
-                $latestPerMember->push($loan);
-                $seenMembers[] = $loan->member_id;
+            $val = $params['is_return'];
+            if ($val === '1' || $val === 1 || $val === true || $val === 'true') {
+                $isReturn = 1;
+            } elseif ($val === '0' || $val === 0 || $val === false || $val === 'false') {
+                $isReturn = 0;
             }
         }
 
-        $total = count($seenMembers);
+        // ===============================
+        // SUBQUERY: latest loan per member
+        // ===============================
+        $subQuery = Loan::selectRaw('MAX(loan_id) as loan_id')
+            ->groupBy('member_id');
 
-        // Slice untuk pagination
-        $paginated = $latestPerMember->slice(($page - 1) * $perPage, $perPage)->values();
+        if (!empty($params['member_id'])) {
+            $subQuery->where('member_id', $params['member_id']);
+        }
 
-        // Format data jika perlu
-        $data = $paginated->map(function($loan) {
+        if ($isReturn !== null) {
+            $subQuery->where('is_return', $isReturn);
+        }
+
+        // 🔥 SEARCH (member_id)
+        if ($search !== '') {
+            $subQuery->where('member_id', 'LIKE', "%{$search}%");
+        }
+
+        // ===============================
+        // TOTAL DATA
+        // ===============================
+        $loanIds = $subQuery->pluck('loan_id');
+        $total = $loanIds->count();
+
+        // ===============================
+        // PAGINATION MANUAL
+        // ===============================
+        $pagedIds = $loanIds
+            ->slice(($page - 1) * $perPage, $perPage)
+            ->values();
+
+        // ===============================
+        // FETCH FINAL DATA
+        // ===============================
+        $loans = Loan::whereIn('loan_id', $pagedIds)
+            ->orderByDesc('loan_id')
+            ->get();
+
+        $data = $loans->map(function ($loan) {
             return [
-                'loan_id' => $loan->loan_id,
-                'member_id' => $loan->member_id,
-                'nama' => $loan->nama ?? null,
-                'nim' => $loan->nim ?? null,
-                'prodi' => $loan->prodi ?? null,
-                'kelas' => $loan->kelas ?? null,
-                'semester' => $loan->semester ?? null,
-                'loan_date' => $loan->loan_date,
-                'due_date' => $loan->due_date,
+                'loan_id'     => $loan->loan_id,
+                'member_id'   => $loan->member_id,
+                'loan_date'   => $loan->loan_date,
+                'due_date'    => $loan->due_date,
                 'return_date' => $loan->return_date,
-                'status' => $loan->is_return ? 'Lunas' : 'Belum',
+                'status'      => $loan->is_return ? 'Lunas' : 'Belum',
             ];
         });
 
         $payload = [
             'meta' => [
-                'total' => $total,
-                'page' => $page,
-                'per_page' => $perPage
+                'total'    => $total,
+                'page'     => $page,
+                'per_page' => $perPage,
             ],
-            'data' => $data
+            'data' => $data,
         ];
 
         $res->getBody()->write(json_encode($payload));
         return $res->withHeader('Content-Type', 'application/json');
-}
+    }
+
 
     public function show(Request $req, Response $res, $args)
     {
