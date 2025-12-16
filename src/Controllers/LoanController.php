@@ -29,48 +29,38 @@ class LoanController {
         }
 
         // ===============================
-        // SUBQUERY: latest loan per member
+        // QUERY: ALL LOANS (with filter)
         // ===============================
-        $subQuery = Loan::selectRaw('MAX(loan_id) as loan_id')
-            ->groupBy('member_id');
+        $query = Loan::query();
 
         if (!empty($params['member_id'])) {
-            $subQuery->where('member_id', $params['member_id']);
+            $query->where('member_id', $params['member_id']);
         }
 
         if ($isReturn !== null) {
-            $subQuery->where('is_return', $isReturn);
+            $query->where('is_return', $isReturn);
         }
 
         // 🔥 SEARCH (member_id)
         if ($search !== '') {
-            $subQuery->where('member_id', 'LIKE', "%{$search}%");
+            $query->where('member_id', 'LIKE', "%{$search}%");
         }
 
-        // ===============================
-        // TOTAL DATA
-        // ===============================
-        $loanIds = $subQuery->pluck('loan_id');
-        $total = $loanIds->count();
+        // total
+        $total = $query->count();
 
-        // ===============================
-        // PAGINATION MANUAL
-        // ===============================
-        $pagedIds = $loanIds
-            ->slice(($page - 1) * $perPage, $perPage)
-            ->values();
-
-        // ===============================
-        // FETCH FINAL DATA
-        // ===============================
-        $loans = Loan::whereIn('loan_id', $pagedIds)
+        // pagination
+        $loans = $query
             ->orderByDesc('loan_id')
+            ->skip(($page - 1) * $perPage)
+            ->take($perPage)
             ->get();
 
         $data = $loans->map(function ($loan) {
             return [
                 'loan_id'     => $loan->loan_id,
                 'member_id'   => $loan->member_id,
+                'item_code'   => $loan->item_code,
                 'loan_date'   => $loan->loan_date,
                 'due_date'    => $loan->due_date,
                 'return_date' => $loan->return_date,
