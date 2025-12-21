@@ -158,4 +158,50 @@ class LoanController {
         $res->getBody()->write(json_encode(['error' => $message]));
         return $res->withStatus($status)->withHeader('Content-Type', 'application/json');
     }
+
+    public function byMember(Request $req, Response $res, $args)
+    {
+        $nim = $args['nim'];
+
+        $loans = Loan::with(['item.biblio'])
+            ->where('member_id', $nim)
+            ->orderByDesc('loan_date')
+            ->get();
+
+        $pinjamanAktif = [];
+        $riwayat = [];
+
+        foreach ($loans as $loan) {
+            $row = [
+                'loan_id'   => $loan->loan_id,
+                'item_code' => $loan->item_code,
+                'judul_buku'=> $loan->item->biblio->title ?? null,
+                'image_buku'=> $loan->item->biblio->image ?? null,
+                'loan_date' => $loan->loan_date,
+                'due_date'  => $loan->due_date,
+                'return_date' => $loan->return_date,
+                'status' => $loan->is_return ? 'Lunas' : 'Belum'
+            ];
+
+            // PINJAMAN AKTIF
+            if ($loan->is_lent == 1 && $loan->is_return == 0) {
+                $pinjamanAktif[] = $row;
+            }
+
+            // RIWAYAT
+            if ($loan->is_return == 1) {
+                $riwayat[] = $row;
+            }
+        }
+
+        $payload = [
+            'member_id' => $nim,
+            'pinjaman_aktif' => $pinjamanAktif,
+            'riwayat_pinjaman' => $riwayat,
+            'status' => count($pinjamanAktif) > 0 ? 'Belum Lunas' : 'Lunas'
+        ];
+
+        $res->getBody()->write(json_encode($payload));
+        return $res->withHeader('Content-Type', 'application/json');
+    }
 }

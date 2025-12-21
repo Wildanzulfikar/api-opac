@@ -22,8 +22,8 @@ class Loan extends Model
 
     // Relationship to biblio if item_code maps to biblio.biblio_id or call_number:
     // adjust as needed (here assume item_code stores biblio_id)
-    public function biblio()
+    public function item()
     {
-        return $this->belongsTo(Biblio::class, 'item_code', 'biblio_id');
+        return $this->belongsTo(Item::class, 'item_code', 'item_code');
     }
 }
