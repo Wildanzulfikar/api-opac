@@ -22,6 +22,7 @@ return function (App $app) {
     $app->put('/loan/{id}', [LoanController::class, 'update']);
     $app->delete('/loan/{id}', [LoanController::class, 'delete']);
     $app->put('/loan/{id}/return', [LoanController::class, 'markReturned']);
+    $app->get('/loan/member/{member_id}', [LoanController::class, 'memberLoans']);
 
     $app->get('/item', [ItemController::class, 'index']);
     $app->get('/item/{id}', [ItemController::class, 'show']);

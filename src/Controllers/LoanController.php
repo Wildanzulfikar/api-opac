@@ -64,6 +64,7 @@ class LoanController {
                 'loan_date'   => $loan->loan_date,
                 'due_date'    => $loan->due_date,
                 'return_date' => $loan->return_date,
+                'is_return'   => $loan->is_return, // <-- Tambahkan field ini
                 'status'      => $loan->is_return ? 'Lunas' : 'Belum',
             ];
         });
@@ -78,6 +79,38 @@ class LoanController {
         ];
 
         $res->getBody()->write(json_encode($payload));
+        return $res->withHeader('Content-Type', 'application/json');
+    }
+
+    // Endpoint: /loan/member/{member_id}
+    public function memberLoans(Request $req, Response $res, $args)
+    {
+        $memberId = $args['member_id'];
+
+        $loans = Loan::where('member_id', $memberId)
+            ->orderByDesc('loan_date')
+            ->get();
+
+        if ($loans->isEmpty()) {
+            return $this->jsonError($res, 'Loan not found', 404);
+        }
+
+        $data = $loans->map(function ($loan) {
+            return [
+                'loan_id'     => $loan->loan_id,
+                'member_id'   => $loan->member_id,
+                'item_code'   => $loan->item_code,
+                'loan_date'   => $loan->loan_date,
+                'due_date'    => $loan->due_date,
+                'return_date' => $loan->return_date,
+                'is_return'   => $loan->is_return,
+            ];
+        });
+
+        $res->getBody()->write(json_encode([
+            'data' => $data
+        ]));
+
         return $res->withHeader('Content-Type', 'application/json');
     }
 
